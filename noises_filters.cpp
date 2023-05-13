@@ -10,17 +10,19 @@
 using namespace cv;
 using namespace std;
 
+int filter_size = 10;
+
 void setRandomSeed() {
 	srand(time(NULL));
 }
 
 namespace noise {
-	Mat Gaussian(Mat input_img) {
+	Mat Gaussian(Mat input_img, int _mean, int _std) {
 		Mat output_img;
 		input_img.copyTo(output_img);
 
 		// 가우시안 분포를 따르는 랜덤값을 만들기 위한 매개변수
-		double mean = 0.0, std = 50;
+		double mean = _mean, std = _std;
 		Mat Gaussian_noise(input_img.size(), CV_16SC3); //가우시안 값 저장을 위한 행렬
 		Mat Gaussian_noise_display(input_img.size(), CV_8UC3, Scalar::all(127)); //가우시안 노이즈를 표현하기 위한 행렬(중간값으로 초기화)
 		cv::randn(Gaussian_noise, mean, std); // mean은 +x방향 이동값,  std가 클수록 노이즈가 심해짐
@@ -31,13 +33,13 @@ namespace noise {
 		output_img += Gaussian_noise;
 		return output_img;
 	}
-	Mat SaltPapper(Mat input_img) {
+	Mat SaltPapper(Mat input_img, double _noise_div) {
 		Mat output_img;
 		input_img.copyTo(output_img);
 
-		double mean = 0, std = 1;
+		double mean = 0, std = 10, noise_div = _noise_div / 2;
 		Mat randn_num(1, 1, CV_32F);
-		randn(randn_num, mean, std);	// 노이즈의 갯수를 정규분포로 결정
+		randn(randn_num, mean, std); // 노이즈의 갯수를 정규분포로 결정
 
 		// 솔트 페퍼가 잘 안 보여서 128화면에 솔트페퍼를 뿌리기로 했다.
 		Mat SaltPapper_noise_display(input_img.size(), CV_8UC3, Scalar::all(128));
@@ -48,7 +50,7 @@ namespace noise {
 			// 정규표준분포는 |x|<3이면 0.9974퍼를 표현한다. 따라서 middle/3 값을 곱하면 픽셀의 전체 갯수를 적당히 대응시킬수 있을 것이다.
 			/* 정규분포의 x값에 middle을 더하면 전체 픽셀의 절반정도의 숫자가 뽑힌다(정규분포그래프의 중점이 middle이 된다).
 				그러나 절반의 노이즈는 너무 많기 때문에 전체의 1/8픽셀만큼 노이즈를 주기로 결정했다..*/
-		int noises = randn_num.at<double>(0, 0) * middle / 3 + middle / 4;
+		int noises = randn_num.at<double>(0, 0) * middle / 3 + middle / noise_div;
 
 		for (int i = 0; i < noises; ++i) {	// 노이즈 갯수만큼 반복(중복 허용)
 			// 랜덤 x,y 만들기
@@ -66,15 +68,15 @@ namespace noise {
 		output_img += SaltPapper_noise;
 		return output_img;
 	}
-	Mat Periodic(Mat input_img) {
+	Mat Periodic(Mat input_img, double _period, double _range) {
 		Mat output_img;
 		input_img.copyTo(output_img);
 
 		Mat Periodic_noise(output_img.size(), CV_8SC3);	// 노이즈 저장을 위한 행렬
 		// 밝고 어두움의 주기 n번 반복
-		double period = 10;
+		double period = _period;
 		// 진폭의 크기
-		double range = 50;
+		double range = _range;
 
 		for (int row = 0; row < Periodic_noise.rows; ++row) {
 			uchar* pointer_row = Periodic_noise.ptr<uchar>(row);
@@ -87,7 +89,7 @@ namespace noise {
 		}
 		// CV_8SC3은 imshow가 잘 되네? 16U부터는 일반적인 255로는 표현이 잘 안 되던데. 16에서 8로 변환할 수 있다면 saltNoise 표현이 쉬울 것 같다.
 		imshow("Periodic_noise", Periodic_noise);
-		cout << Periodic_noise(Rect(10, 10, 100, 10));
+		//cout << Periodic_noise(Rect(10, 10, 100, 10));
 
 		output_img += Periodic_noise;
 		return output_img;
@@ -98,9 +100,70 @@ int main() {
 	setRandomSeed();
 	Mat src = imread("./images/scene.jpg");
 	imshow("src image", src);
-	imshow("Gaussian image", noise::Gaussian(src));
-	imshow("SaltPapper image", noise::SaltPapper(src));
-	imshow("Periodic image", noise::Periodic(src));
+
+	// 노이즈 첨가
+	Mat Gaussian_noise_img = noise::Gaussian(src, 0, 100);
+	imshow("Gaussian image", Gaussian_noise_img);
+
+	Mat SaltPapper_noise_img = noise::SaltPapper(src, 8);
+	imshow("SaltPapper image", SaltPapper_noise_img);
+
+	Mat Periodic_noise_img = noise::Periodic(src, 10, 30);
+	imshow("Periodic image", Periodic_noise_img);
+
+		// 노이즈 억제
+	// 평균값(블러) a
+	Mat Gaussian_aF;
+	blur(Gaussian_noise_img, Gaussian_aF, Size(10, 10));
+	imshow("Gaussian a filter", Gaussian_aF);
+
+	Mat SaltPapper_aF;
+	blur(SaltPapper_noise_img, SaltPapper_aF, Size(10, 10));
+	imshow("SaltPapper a filter", SaltPapper_aF);
+
+	Mat Periodic_aF;
+	blur(Periodic_noise_img, Periodic_aF, Size(10, 10));
+	imshow("Periodic a filter", Periodic_aF);
+
+	// 가우시안 g
+	Mat Gaussian_gF;
+	GaussianBlur(Gaussian_noise_img, Gaussian_gF, Size(11, 11), 0, 0);
+	imshow("Gaussian g filter", Gaussian_gF);
+
+	Mat SaltPapper_gF;
+	GaussianBlur(SaltPapper_noise_img, SaltPapper_gF, Size(11, 11), 0, 0);
+	imshow("SaltPapper g filter", SaltPapper_gF);
+
+	Mat Periodic_gF;
+	GaussianBlur(Periodic_noise_img, Periodic_gF, Size(11, 11), 0, 0);
+	imshow("Periodic g filter", Periodic_gF);
+
+	// 중간값 (median)
+	Mat Gaussian_mF;
+	medianBlur(Gaussian_noise_img, Gaussian_mF, 5);
+	imshow("Gaussian m filter", Gaussian_mF);
+
+	Mat SaltPapper_mF;
+	medianBlur(SaltPapper_noise_img, SaltPapper_mF, 5);
+	imshow("SaltPapper m filter", SaltPapper_mF);
+
+	Mat Periodic_mF;
+	medianBlur(Periodic_noise_img, Periodic_mF, 5);
+	imshow("Periodic m filter", Periodic_mF);
+
+	// 데이터 비교
+	// 뺄셈
+	Mat Gaussian_sub_img(src.size(), CV_8UC3);
+	Mat SaltPapper_sub_img(src.size(), CV_8UC3);
+	Mat Periodic_sub_img(src.size(), CV_8UC3);
+
+	Gaussian_sub_img = abs(Gaussian_noise_img - src);	// 원본에서 노이즈와의 변화량
+	SaltPapper_sub_img = abs(SaltPapper_noise_img - src);
+	Periodic_sub_img = abs(Periodic_noise_img - src);
+
+	imshow("Gaussian sub image", Gaussian_sub_img);
+	imshow("SaltPapper sub image", SaltPapper_sub_img);
+	imshow("Periodic sub image", Periodic_sub_img);
 
 	waitKey(0);
 	return 0;
