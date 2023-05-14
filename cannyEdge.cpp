@@ -3,21 +3,31 @@
 
 using namespace cv;
 
-Mat src, src_gray;
-Mat dst, detected_edges;
+Mat src, NMS;
+Mat dst, detected_edges, dst_, dst__;
 int edgeThresh = 1;
-int lowThreshold = 0;
-int const max_lowThreshold = 100;
+int lowThreshold;
+int const max_lowThreshold = 255;
 int ratio = 3;
 int kernel_size = 3;
 
 static void CannyThreshold(int, void*) {
 	blur(src, detected_edges, Size(3, 3));
 	Canny(detected_edges, detected_edges, lowThreshold, lowThreshold * ratio, kernel_size);
+	threshold(NMS, dst_, lowThreshold, 255, THRESH_BINARY);
+	threshold(NMS, dst__, lowThreshold, 255, THRESH_TOZERO);
 	dst = Scalar::all(0);
 	src.copyTo(dst, detected_edges);
-	imshow("Image", src);
 	imshow("Canny", dst);
+	imshow("NMS_BINARY", dst_);
+	imshow("NMS_TOZERO", dst__);
+}
+
+void CannyThresholdTrackbar(Mat src) {
+	dst.create(src.size(), src.type());
+	namedWindow("Canny", WINDOW_AUTOSIZE);
+	createTrackbar("Min Threshold:", "Canny", &lowThreshold, max_lowThreshold, CannyThreshold);
+	CannyThreshold(0, 0);
 }
 
 // 가우시안 필터
@@ -31,20 +41,11 @@ Mat Gradiant_NMS(Mat input);
 Mat Canny_filter(Mat input);
 
 
-
 int main() {
 	/*Mat*/ src = imread("./images/Lenna.jpg", IMREAD_GRAYSCALE);
-	imshow("src", src);
+	NMS = Canny_filter(src);
 
-	Mat dst = Canny_filter(src);
-	imshow("canny_result", dst);
-
-	src = imread("./images/Lenna.jpg", IMREAD_GRAYSCALE);
-	if (src.empty()) { return -1; }
-	dst.create(src.size(), src.type());
-	namedWindow("Canny", WINDOW_AUTOSIZE);
-	createTrackbar("Min Threshold:", "Canny", &lowThreshold, max_lowThreshold, CannyThreshold);
-	CannyThreshold(0, 0);
+	CannyThresholdTrackbar(src);
 
 	waitKey(0);
 	return 0;
@@ -77,13 +78,14 @@ Mat Sobel_xy(Mat input) {
 	/* 엣지의 정의가 밝기가 급격하게 변하는 곳이라고 한다면,
 	abs를 적용 했을 때에 국소적 최댓값만 찾으면 되기 때문에 오히려 편해진다.*/
 	convertScaleAbs(grad_x, abs_grad_x);
-	imshow("sobel_x", abs_grad_x);
+	//imshow("sobel_x", abs_grad_x);
 	convertScaleAbs(grad_y, abs_grad_y);
-	imshow("sobel_y", abs_grad_y);
+	//imshow("sobel_y", abs_grad_y);
 	addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0, grad);
 
 	return grad;
 }
+
 Mat Gradiant_NMS(Mat input) {
 	Mat NMS_x, NMS_y;
 	input.copyTo(NMS_x); input.copyTo(NMS_y);
@@ -111,7 +113,6 @@ Mat Gradiant_NMS(Mat input) {
 		}
 	}
 	Mat NMS = NMS_x + NMS_y;	// 그냥 더해도 되나?
-	NMS *= 100;
 	return NMS;
 }
 
@@ -123,7 +124,7 @@ Mat Canny_filter(Mat input) {
 	// 기울기 합산
 	dst = Sobel_xy(dst); imshow("Sobel_xy", dst);
 	// 비최대 억제 (Non-maximum Suppression)
-	dst = Gradiant_NMS(dst); imshow("NMS", dst);
+	dst = Gradiant_NMS(dst);
 
 	return dst;
 }
