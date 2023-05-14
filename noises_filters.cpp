@@ -96,13 +96,47 @@ namespace noise {
 	}
 }
 
+void histogram(string name ,Mat inputImg) {
+	Mat src = inputImg;
+	vector<Mat> bgr_planes;
+	split(src, bgr_planes);
+	int histSize = 256;
+	float range[] = { 0, 256 }; //the upper boundary is exclusive
+	const float* histRange = { range };
+	bool uniform = true, accumulate = false;
+	Mat b_hist, g_hist, r_hist;
+	calcHist(&bgr_planes[0], 1, 0, Mat(), b_hist, 1, &histSize, &histRange, uniform, accumulate);
+	calcHist(&bgr_planes[1], 1, 0, Mat(), g_hist, 1, &histSize, &histRange, uniform, accumulate);
+	calcHist(&bgr_planes[2], 1, 0, Mat(), r_hist, 1, &histSize, &histRange, uniform, accumulate);
+	int hist_w = 768, hist_h = 400;
+	int bin_w = cvRound((double)hist_w / histSize);
+	Mat histImage(hist_h, hist_w, CV_8UC3, Scalar(0, 0, 0));
+	normalize(b_hist, b_hist, 0, histImage.rows, NORM_MINMAX, -1, Mat());
+	normalize(g_hist, g_hist, 0, histImage.rows, NORM_MINMAX, -1, Mat());
+	normalize(r_hist, r_hist, 0, histImage.rows, NORM_MINMAX, -1, Mat());
+	for (int i = 0; i < 255; i++){
+		line(histImage, Point(bin_w * (i), hist_h),
+			Point(bin_w * (i), hist_h - b_hist.at<float>(i)),
+			Scalar(255, 0, 0));
+		line(histImage, Point(bin_w * (i), hist_h),
+			Point(bin_w * (i), hist_h - g_hist.at<float>(i)),
+			Scalar(0, 255, 0));
+		line(histImage, Point(bin_w * (i), hist_h),
+			Point(bin_w * (i), hist_h - r_hist.at<float>(i)),
+			Scalar(0, 0, 255));
+	}
+
+	imshow(name, histImage);
+}
+
 int main() {
 	setRandomSeed();
-	Mat src = imread("./images/scene.jpg");
+	Mat src = imread("./images/Lenna.jpg");
+	//Mat src = imread("./images/Lenna.jpg");
 	imshow("src image", src);
 
 	// 노이즈 첨가
-	Mat Gaussian_noise_img = noise::Gaussian(src, 0, 100);
+	Mat Gaussian_noise_img = noise::Gaussian(src, 0, 40);
 	imshow("Gaussian image", Gaussian_noise_img);
 
 	Mat SaltPapper_noise_img = noise::SaltPapper(src, 8);
@@ -111,61 +145,56 @@ int main() {
 	Mat Periodic_noise_img = noise::Periodic(src, 10, 30);
 	imshow("Periodic image", Periodic_noise_img);
 
-		// 노이즈 억제
-	// 평균값(블러) a
-	Mat Gaussian_aF;
-	blur(Gaussian_noise_img, Gaussian_aF, Size(10, 10));
+	//================================//
+	// 가우시안 노이즈 억제
+	Mat Gaussian_aF;	// 평균
+	blur(Gaussian_noise_img, Gaussian_aF, Size(5, 5));
 	imshow("Gaussian a filter", Gaussian_aF);
-
-	Mat SaltPapper_aF;
-	blur(SaltPapper_noise_img, SaltPapper_aF, Size(10, 10));
-	imshow("SaltPapper a filter", SaltPapper_aF);
-
-	Mat Periodic_aF;
-	blur(Periodic_noise_img, Periodic_aF, Size(10, 10));
-	imshow("Periodic a filter", Periodic_aF);
-
-	// 가우시안 g
-	Mat Gaussian_gF;
-	GaussianBlur(Gaussian_noise_img, Gaussian_gF, Size(11, 11), 0, 0);
+	Mat Gaussian_gF;	// 가우시안
+	GaussianBlur(Gaussian_noise_img, Gaussian_gF, Size(5, 5), 0, 0);
 	imshow("Gaussian g filter", Gaussian_gF);
-
-	Mat SaltPapper_gF;
-	GaussianBlur(SaltPapper_noise_img, SaltPapper_gF, Size(11, 11), 0, 0);
-	imshow("SaltPapper g filter", SaltPapper_gF);
-
-	Mat Periodic_gF;
-	GaussianBlur(Periodic_noise_img, Periodic_gF, Size(11, 11), 0, 0);
-	imshow("Periodic g filter", Periodic_gF);
-
-	// 중간값 (median)
-	Mat Gaussian_mF;
+	Mat Gaussian_mF;	// 중간값
 	medianBlur(Gaussian_noise_img, Gaussian_mF, 5);
 	imshow("Gaussian m filter", Gaussian_mF);
 
+	// 솔트페퍼 노이즈 억제
+	Mat SaltPapper_aF;
+	blur(SaltPapper_noise_img, SaltPapper_aF, Size(5, 5));
+	imshow("SaltPapper a filter", SaltPapper_aF);
+	Mat SaltPapper_gF;
+	GaussianBlur(SaltPapper_noise_img, SaltPapper_gF, Size(5, 5), 0, 0);
+	imshow("SaltPapper g filter", SaltPapper_gF);
 	Mat SaltPapper_mF;
 	medianBlur(SaltPapper_noise_img, SaltPapper_mF, 5);
 	imshow("SaltPapper m filter", SaltPapper_mF);
 
+	// 주기 노이즈 억제
+	Mat Periodic_aF;
+	blur(Periodic_noise_img, Periodic_aF, Size(5, 5));
+	imshow("Periodic a filter", Periodic_aF);
+	Mat Periodic_gF;
+	GaussianBlur(Periodic_noise_img, Periodic_gF, Size(5, 5), 0, 0);
+	imshow("Periodic g filter", Periodic_gF);
 	Mat Periodic_mF;
 	medianBlur(Periodic_noise_img, Periodic_mF, 5);
 	imshow("Periodic m filter", Periodic_mF);
 
-	// 데이터 비교
-	// 뺄셈
-	Mat Gaussian_sub_img(src.size(), CV_8UC3);
-	Mat SaltPapper_sub_img(src.size(), CV_8UC3);
-	Mat Periodic_sub_img(src.size(), CV_8UC3);
+	//// 원본과 차이
+	//// 뺄셈
+	//Mat Gaussian_sub_img(src.size(), CV_8UC3);
+	//Mat SaltPapper_sub_img(src.size(), CV_8UC3);
+	//Mat Periodic_sub_img(src.size(), CV_8UC3);
 
-	Gaussian_sub_img = abs(Gaussian_noise_img - src);	// 원본에서 노이즈와의 변화량
-	SaltPapper_sub_img = abs(SaltPapper_noise_img - src);
-	Periodic_sub_img = abs(Periodic_noise_img - src);
+	//Gaussian_sub_img = abs(Gaussian_noise_img - src);
+	//SaltPapper_sub_img = abs(SaltPapper_noise_img - src);
+	//Periodic_sub_img = abs(Periodic_noise_img - src);
 
-	imshow("Gaussian sub image", Gaussian_sub_img);
-	imshow("SaltPapper sub image", SaltPapper_sub_img);
-	imshow("Periodic sub image", Periodic_sub_img);
+	//imshow("Gaussian sub image", Gaussian_sub_img);
+	//imshow("SaltPapper sub image", SaltPapper_sub_img);
+	//imshow("Periodic sub image", Periodic_sub_img);
+
+	//histogram("src histo", src);
 
 	waitKey(0);
 	return 0;
 }
-
